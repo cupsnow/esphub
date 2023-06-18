@@ -20,7 +20,8 @@
 
 #include "dw_util.h"
 #include "dw_looper.h"
-#include "em1_led.h"
+#include "eh_led.h"
+#include "eh_btn.h"
 
 #define log_m(_l, _f, _args...) do { \
 	unsigned long tms = xTaskGetTickCount() * portTICK_PERIOD_MS; \
@@ -31,7 +32,7 @@
 #define log_e(...) log_m("[ERROR]", ##__VA_ARGS__)
 #define log_i(...) log_m("[INFO]", ##__VA_ARGS__)
 
-#define em1_task_prio1 (tskIDLE_PRIORITY + 1)
+#define eh_task_prio1 (tskIDLE_PRIORITY + 1)
 
 /* LOGGER
  *
@@ -64,10 +65,38 @@ static void aloe_logger_init(void) {
 static struct {
 	dw_looper_t looper;
 	aloe_thread_t tsk;
-
 	float led1_duty100;
+	dw_looper_msg_t btn_looper_msg;
 
 } main_looper = {};
+
+/* BTN
+ *
+ */
+
+static void btn_check(dw_looper_msg_t *looper_msg) {
+	if (looper_msg != &main_looper.btn_looper_msg) {
+		log_e("Sanity check unexpect btn check\n");
+		return;
+	}
+
+	log_d("GPIO[%d] intr, val: %d\n", eh_btn1_gio, gpio_get_level(eh_btn1_gio));
+}
+
+static void btn_isr(void *args) {
+	BaseType_t prio_woken = pdFALSE;
+
+	if (main_looper.btn_looper_msg.handler == NULL) {
+		main_looper.btn_looper_msg.handler = &btn_check;
+		if (dw_looper_add(&main_looper.looper, &main_looper.btn_looper_msg, 
+                0, &prio_woken) != 0) {
+			main_looper.btn_looper_msg.handler = NULL;
+		}
+	}
+	if (prio_woken) {
+		portYIELD_FROM_ISR();
+	}
+}
 
 static void main_looper_run(aloe_thread_t *args) {
 #define looperDur 30
@@ -75,6 +104,8 @@ static void main_looper_run(aloe_thread_t *args) {
 	static int outputHeapSizeCountDown = (outputHeapSizeDur + looperDur - 1) / looperDur;
 	dw_looper_msg_t *msg;
 	int bri_inc = 3;
+
+    log_d("main_looper start\n");
 
 	if (args != &main_looper.tsk) {
 		log_e("Sanity check invalid main_looper\n");
@@ -89,9 +120,9 @@ static void main_looper_run(aloe_thread_t *args) {
 		}
 
 		msg = dw_looper_once(&main_looper.looper, looperDur);
-
 		if (msg) {
 			if (msg->handler) (*msg->handler)(msg);
+            msg->handler = NULL;
 		}
 
 		main_looper.led1_duty100 += bri_inc;
@@ -102,7 +133,7 @@ static void main_looper_run(aloe_thread_t *args) {
 			main_looper.led1_duty100 = 100;
 			bri_inc = -3;
 		}
-		em1_led1_set_bri(main_looper.led1_duty100);
+		eh_led1_set_bri(main_looper.led1_duty100);
 	}
 }
 
@@ -112,29 +143,30 @@ static void* main_looper_start(void) {
 		return NULL;
 	}
 
-	memset(&main_looper, 0, sizeof(main_looper));
+	memset(&main_looper.looper, 0, sizeof(main_looper.looper));
 
 	if (!dw_looper_init(&main_looper.looper, 20)) {
 		log_e("Failed create main_looper\n");
 		return NULL;
 	}
+	
+	main_looper.looper.ready = 1;
 
 	if (aloe_thread_run(&main_looper.tsk, &main_looper_run, 2048,
-			em1_task_prio1, "aloe_tsk1") != 0) {
+			eh_task_prio1, "aloe_tsk1") != 0) {
 		log_e("Failed create looper task\n");
 		return NULL;
 	}
-	main_looper.looper.ready = 1;
 	return &main_looper;
 }
 
-const char* em1_ver_str(void) {
+const char* eh_ver_str(void) {
 	static const char *ver_str = "0.0.1";
 
 	return ver_str;
 }
 
-void em1_reset(int dly) {
+void eh_reset(int dly) {
 	for ( ; dly > 0; dly--) {
 		log_d("Restarting in %d seconds...\n", dly);
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -147,7 +179,7 @@ void em1_reset(int dly) {
 void app_main(void) {
 	aloe_logger_init();
 
-	log_d("em1 start ver: %s\n", em1_ver_str());
+	log_d("eh version: %s\n", eh_ver_str());
 
 	/* Print chip information */
 	esp_chip_info_t chip_info;
@@ -172,7 +204,9 @@ void app_main(void) {
 
 	log_i("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
 
-	em1_led1_init(0);
+	eh_led1_init(0);
+
+	eh_btn1_init(&btn_isr, NULL);
 
 	main_looper_start();
 

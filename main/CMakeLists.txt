@@ -1,6 +1,7 @@
 set(srcs
-  "em1_main.c"
-  "em1_led.c"
+  "eh_main.c"
+  "eh_led.c"
+  "eh_btn.c"
   "dw_util.c"
   "dw_looper.c"
 )

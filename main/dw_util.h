@@ -18,8 +18,11 @@
 extern "C" {
 #endif
 
-#define dw_log_m(_lvl, _fmt, _args...) printf("[%d]%s[%s][%s][#%d]" _fmt, \
-		(unsigned)aloe_tick2ms(aloe_ticks()), _lvl, dw_xp(0), __func__, __LINE__, ##_args)
+#define dw_log_m(_l, _f, _args...) do { \
+	unsigned long tms = xTaskGetTickCount() * portTICK_PERIOD_MS; \
+	printf("[%ld.%03ld]%s[%s][#%d] " _f, tms / 1000, tms % 1000, _l, __func__, __LINE__, ##_args); \
+} while(0)
+
 
 /** Get LP or HP. */
 const char *dw_xp(int var);
