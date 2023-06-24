@@ -23,6 +23,14 @@ extern "C" {
 	printf("[%ld.%03ld]%s[%s][#%d] " _f, tms / 1000, tms % 1000, _l, __func__, __LINE__, ##_args); \
 } while(0)
 
+#define eh_task_prio1 (tskIDLE_PRIORITY + 1)
+#define eh_sinsvc_port 6000
+
+#define ESPIPADDR_ENT(_ipinfo, _n) ((uint8_t*)&(_ipinfo)->addr)[_n]
+#define ESPIPADDR_PKARG(_ipinfo) ESPIPADDR_ENT(_ipinfo, 0), \
+	ESPIPADDR_ENT(_ipinfo, 1), ESPIPADDR_ENT(_ipinfo, 2), \
+	ESPIPADDR_ENT(_ipinfo, 3)
+
 
 /** Get LP or HP. */
 const char *dw_xp(int var);

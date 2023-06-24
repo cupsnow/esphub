@@ -26,6 +26,7 @@ extern "C" {
 #define aloe_arraysize(_a) (sizeof(_a) / sizeof((_a)[0]))
 #define aloe_min(_a, _b) ((_a) <= (_b) ? (_a) : (_b))
 #define aloe_max(_a, _b) ((_a) >= (_b) ? (_a) : (_b))
+#define aloe_abs(_v) (((_v) < 0.0) ? (0.0 - (_v)) : (_v))
 #define aloe_10e3 1000ul
 #define aloe_10e6 1000000ul
 #define aloe_10e9 1000000000ul
