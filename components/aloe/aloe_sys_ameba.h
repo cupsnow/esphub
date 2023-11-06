@@ -60,7 +60,6 @@ struct aloe_thread_rec  {
 
 #define aloe_msDur(_ms) ((_ms) == 0 ? 0 : \
 		(unsigned long)(_ms) == aloe_dur_infinite ? portMAX_DELAY : \
-		(_ms) < 0 ? portMAX_DELAY : \
 		(TickType_t)(_ms) < portTICK_PERIOD_MS ? 1 : \
 		(_ms) / portTICK_PERIOD_MS)
 

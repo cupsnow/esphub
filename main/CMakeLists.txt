@@ -4,7 +4,8 @@ set(srcs
   "eh_btn.c"
   "dw_util.c"
   "dw_looper.c"
-  "dw_sinsvc.c"
+  "dw_sinsvc2.c"
+  "dw_spi2.c"
 )
 
 set(incs

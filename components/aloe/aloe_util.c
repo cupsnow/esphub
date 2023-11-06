@@ -12,6 +12,18 @@
 #include "aloe_sys.h"
 
 ALOE_SYS_TEXT1_SECTION
+aloe_buf_t* aloe_buf_clear(aloe_buf_t *buf) {
+	_aloe_buf_clear(buf);
+	return buf;
+}
+
+ALOE_SYS_TEXT1_SECTION
+aloe_buf_t* aloe_buf_flip(aloe_buf_t *buf) {
+	_aloe_buf_flip(buf);
+	return buf;
+}
+
+ALOE_SYS_TEXT1_SECTION
 aloe_buf_t* aloe_buf_rewind(aloe_buf_t *buf) {
 	size_t sz;
 
@@ -29,6 +41,50 @@ aloe_buf_t* aloe_buf_rewind(aloe_buf_t *buf) {
 	buf->pos = 0;
 	buf->lmt = sz;
 	return buf;
+}
+
+ALOE_SYS_TEXT1_SECTION
+size_t aloe_rinbuf_read(aloe_buf_t *buf, void *data, size_t sz) {
+	size_t rw_sz, ret_sz, rem;
+
+	if (sz > buf->lmt) sz = buf->lmt;
+	ret_sz = sz;
+
+	rem = buf->cap - buf->pos;
+
+	// rinbuf max continuous readable size: min(lmt, (cap - pos))
+	while ((rw_sz = aloe_min(sz, rem)) > 0) {
+		memcpy(data, (char*)buf->data + buf->pos, rw_sz);
+		buf->pos = (buf->pos + rw_sz) % buf->cap;
+		buf->lmt -= rw_sz;
+		if (rw_sz >= sz) break;
+		sz -= rw_sz;
+		data = (char*)data + rw_sz;
+		rem = buf->cap - buf->pos;
+	}
+	return ret_sz;
+}
+
+ALOE_SYS_TEXT1_SECTION
+size_t aloe_rinbuf_write(aloe_buf_t *buf, const void *data, size_t sz) {
+	size_t rw_sz, ret_sz, rem;
+
+	rem = buf->cap - buf->lmt;
+	ret_sz = aloe_min(sz, rem);
+
+	// rinbuf max continuous writable position: wpos = ((pos + lmt) % cap)
+	while ((rw_sz = aloe_min(sz, rem)) > 0) {
+		int rw_pos = (buf->pos + buf->lmt) % buf->cap;
+		size_t csz = buf->cap - rw_pos;
+		if (rw_sz > csz) rw_sz = csz;
+		memcpy((char*)buf->data + rw_pos, data, rw_sz);
+		buf->lmt += rw_sz;
+		if (rw_sz >= sz) break;
+		sz -= rw_sz;
+		data = (char*)data + rw_sz;
+		rem = buf->cap - buf->lmt;
+	}
+	return ret_sz;
 }
 
 size_t aloe_buf_add_pos(aloe_buf_t *buf, const void *data, size_t data_sz) {
@@ -216,9 +272,29 @@ size_t aloe_hd2(void *_buf, size_t buf_sz, const void *data, size_t data_cnt,
 #undef width_val
 }
 
+ALOE_SYS_TEXT1_SECTION
 unsigned aloe_cksum(const void *buf, size_t sz, unsigned cksum) {
 	for ( ; sz > 0; sz--, buf = (const void*)((uint8_t*)buf + 1)) {
 		cksum += *(uint8_t*)buf;
 	}
 	return cksum;
+}
+
+ALOE_SYS_TEXT1_SECTION
+int aloe_rinfb_init(aloe_rinfb_t *rinfb, void *buf, int rinfb_unit,
+		int rinfb_cnt) {
+	int i;
+	aloe_buf_t *fb;
+
+	fb = rinfb->fb = (aloe_buf_t*)buf;
+	fb->data = (void*)&fb[rinfb->fb_cnt = rinfb_cnt];
+	fb->cap = rinfb_unit;
+	fb->pos = fb->lmt = 0;
+	for (i = 1; i < rinfb_cnt; i++) {
+		fb++;
+		fb->data = (void*)((char*)fb[-1].data + fb[-1].cap);
+		fb->cap = rinfb_unit;
+		fb->pos = fb->lmt = 0;
+	}
+    return 0;
 }

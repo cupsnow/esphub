@@ -91,7 +91,8 @@ typedef enum aloe_mem_id_enum {
 	aloe_mem_id_sig
 } aloe_mem_id_t;
 
-typedef struct __attribute__((packed)) aloe_mem_rec {
+// __attribute__((packed)) cause crash on ameba
+typedef struct /* __attribute__((packed)) */ aloe_mem_rec {
 	const aloe_mem_id_t *sig;
 	aloe_mem_id_t id;
 	size_t sz;

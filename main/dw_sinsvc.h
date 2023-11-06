@@ -20,8 +20,8 @@
 extern "C" {
 #endif
 
-int dw_sinsvc_init(void);
-int dw_sinsvc_launched(void);
+int dw_sinsvc2_init(void);
+int dw_sinsvc2_send(const void *data, size_t size);
 int dw_svcaddr(char *addr, size_t len, struct in_addr *sin_addr);
 
 #ifdef __cplusplus

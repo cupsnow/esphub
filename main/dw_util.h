@@ -31,6 +31,12 @@ extern "C" {
 	ESPIPADDR_ENT(_ipinfo, 1), ESPIPADDR_ENT(_ipinfo, 2), \
 	ESPIPADDR_ENT(_ipinfo, 3)
 
+#define DECKWIFI_THREAD_PRIO_DEF (eh_task_prio1)
+#define DECKWIFI_THREAD_PRIO_SPIS (DECKWIFI_THREAD_PRIO_DEF)
+#define DECKWIFI_THREAD_PRIO_SINSVC (DECKWIFI_THREAD_PRIO_DEF)
+#define DECKWIFI_SOCKET_SVC_PORT eh_sinsvc_port
+#define DW_SPI_TRUNK_SIZE 1024
+#define SPI_BY_DMA 1
 
 /** Get LP or HP. */
 const char *dw_xp(int var);

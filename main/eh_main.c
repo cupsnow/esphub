@@ -1,7 +1,9 @@
-/*
- * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
+/* $Id$
  *
- * SPDX-License-Identifier: CC0-1.0
+ * Copyright 2023, Joelai
+ * All Rights Reserved.
+ *
+ * @author joelai
  */
 
 #include <stdio.h>
@@ -28,12 +30,15 @@
 #include "dw_util.h"
 #include "dw_looper.h"
 #include "dw_sinsvc.h"
+#include "dw_spi.h"
 #include "eh_led.h"
 #include "eh_btn.h"
 
-#define log_d(...) dw_log_m("[Debug]", ##__VA_ARGS__)
-#define log_e(...) dw_log_m("[ERROR]", ##__VA_ARGS__)
-#define log_i(...) dw_log_m("[INFO]", ##__VA_ARGS__)
+//#define log_d(...) dw_log_m("[Debug]", ##__VA_ARGS__)
+//#define log_e(...) dw_log_m("[ERROR]", ##__VA_ARGS__)
+#define log_e(...) aloe_log_e(__VA_ARGS__)
+#define log_d(...) aloe_log_d(__VA_ARGS__)
+#define log_i(...) aloe_log_add(aloe_log_level_info, __func__, __LINE__, __VA_ARGS__)
 
 typedef enum {
 	wifi_ophase_init = 0,
@@ -56,7 +61,11 @@ static struct {
 	float led1_duty100, led1_step;
 
 	// btn
-	dw_looper_msg_t btn_looper_msg;
+	struct {
+		dw_looper_msg_t hdr;
+		button_event_t state;
+	} btn_looper_msg;
+	button_handle_t btn2_hdl;
 
     struct {
         aloe_sem_t lock;
@@ -75,6 +84,7 @@ static struct {
 
 static int eh_wifi_sta_start(void);
 
+// instead of aloe builtin
 void aloe_log_add_va(int lvl, const char *tag, long lno,
 		const char *fmt, va_list va) {
     typeof(eh_impl.logger) *logger = &eh_impl.logger;
@@ -97,8 +107,8 @@ static void aloe_logger_init(void) {
     }
 }
 
-static int eh_looper_msg1_post_new(void (*handler)(dw_looper_msg_t*),
-		const char *nm) {
+static int _eh_looper_msg1_post_new(void (*handler)(dw_looper_msg_t*),
+		const char *nm, void *rt) {
 	dw_looper_msg_t *looper_msg;
 
 	if (!(looper_msg = aloe_mem_malloc(aloe_mem_id_stdc,
@@ -107,7 +117,8 @@ static int eh_looper_msg1_post_new(void (*handler)(dw_looper_msg_t*),
 		return -1;
 	}
 	looper_msg->handler = handler;
-	if (dw_looper_add(dw_looper_main, looper_msg, 0, NULL) != 0) {
+	if (dw_looper_add(dw_looper_main, looper_msg, aloe_dur_infinite,
+			rt) != 0) {
 		aloe_mem_free(looper_msg);
 		log_e("Failed send looper msg\n");
 		return -1;
@@ -115,31 +126,55 @@ static int eh_looper_msg1_post_new(void (*handler)(dw_looper_msg_t*),
 	return 0;
 }
 
+#define eh_looper_msg1_post_new(_hdl, _nm) \
+	_eh_looper_msg1_post_new(_hdl, _nm, _NULL)
+
 static void btn_triggered(dw_looper_msg_t *looper_msg) {
 	int val = gpio_get_level(eh_btn1_gio);
 
-	if (looper_msg != &eh_impl.btn_looper_msg) {
+	if (looper_msg != &eh_impl.btn_looper_msg.hdr) {
 		log_e("Sanity check unexpect btn check\n");
 		return;
 	}
 
-	eh_impl.btn_looper_msg.handler = NULL;
+	eh_impl.btn_looper_msg.hdr.handler = NULL;
 
 	if (val == 0) {
 		eh_wifi_sta_start();
 	}
 
-	log_d("GPIO[%d] intr, val: %d\n", eh_btn1_gio, val);
+	log_d("GPIO[%d] intr, val: %d, evt: %d\n", eh_btn1_gio, val,
+			eh_impl.btn_looper_msg.state);
 }
 
 static void btn_isr(void *args) {
 	BaseType_t prio_woken = pdFALSE;
 
-	if (eh_impl.btn_looper_msg.handler == NULL) {
-		eh_impl.btn_looper_msg.handler = &btn_triggered;
-		if (dw_looper_add(dw_looper_main, &eh_impl.btn_looper_msg,
+	if (eh_impl.btn_looper_msg.hdr.handler == NULL) {
+		eh_impl.btn_looper_msg.hdr.handler = &btn_triggered;
+		if (dw_looper_add(dw_looper_main, &eh_impl.btn_looper_msg.hdr,
                 0, &prio_woken) != 0) {
-			eh_impl.btn_looper_msg.handler = NULL;
+			eh_impl.btn_looper_msg.hdr.handler = NULL;
+		}
+	}
+	if (prio_woken) {
+		portYIELD_FROM_ISR();
+	}
+}
+
+static void btn2_cb(void *button_handle, void *usr_data) {
+	(void)button_handle;
+	(void)usr_data;
+
+	BaseType_t prio_woken = pdFALSE;
+	button_event_t state = iot_button_get_event(eh_impl.btn2_hdl);
+
+	if (eh_impl.btn_looper_msg.hdr.handler == NULL) {
+		eh_impl.btn_looper_msg.hdr.handler = &btn_triggered;
+		eh_impl.btn_looper_msg.state = state;
+		if (dw_looper_add(dw_looper_main, &eh_impl.btn_looper_msg.hdr,
+                0, &prio_woken) != 0) {
+			eh_impl.btn_looper_msg.hdr.handler = NULL;
 		}
 	}
 	if (prio_woken) {
@@ -196,7 +231,7 @@ static void eh_wifi_feedback(dw_looper_msg_t *looper_msg) {
 				ESPIPADDR_PKARG(&ipinfo.ip), ESPIPADDR_PKARG(&ipinfo.netmask),
 				ESPIPADDR_PKARG(&ipinfo.gw));
 
-		dw_sinsvc_init();
+		dw_sinsvc2_init();
 		goto finally;
 	}
 
@@ -339,6 +374,15 @@ static void eh_looper_task(aloe_thread_t *args) {
 
     log_d("eh_impl start\n");
 
+    if (dw_spi2_start(0, 25000) != 0) {
+		log_e("Sanity check start spi2\n");
+		return;
+    }
+    if (dw_sinsvc2_init() != 0) {
+		log_e("Sanity check start sinsvc2\n");
+		return;
+    }
+
 	if (args != &eh_impl.tsk) {
 		log_e("Sanity check invalid eh_impl\n");
 		return;
@@ -371,7 +415,7 @@ static void* eh_looper_start(void) {
 
 	eh_impl.looper.ready = 1;
 
-	if (aloe_thread_run(&eh_impl.tsk, &eh_looper_task, 10240,
+	if (aloe_thread_run(&eh_impl.tsk, &eh_looper_task, 4096,
 			eh_task_prio1, "eh_looper") != 0) {
 		log_e("Failed create looper task\n");
 		return NULL;
@@ -438,7 +482,8 @@ void app_main(void) {
 	log_i("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
 
 	eh_led1_init(0);
-	eh_btn1_init(&btn_isr, NULL);
+//	eh_btn1_init(&btn_isr, NULL);
+	eh_impl.btn2_hdl = eh_btn2_init(&btn2_cb, NULL);
 	eh_wifi_init();
 
 	eh_looper_start();

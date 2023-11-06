@@ -13,6 +13,23 @@
 #include <dxOS.h>
 #include <psram_reserve.h>
 
+/*
+#define dw_log_m(_lvl, _fmt, _args...) DiagPrintf("[%d]%s[%s][%s][#%d]" _fmt, \
+		(unsigned)aloe_tick2ms(aloe_ticks()), _lvl, dw_xp(0), __func__, __LINE__, ##_args)
+#define dw_log_rd(_lvl, _fmt, _args...) DiagPrintf("[%d]%s[%s][%s][#%d]" _fmt, \
+		(unsigned)aloe_tick2ms(aloe_ticks()), _lvl, dw_xp(0), __func__, \
+		__LINE__, ##_args)
+#define dw_log_hp(_lvl, _fmt, _args...) DX_PRINT_RAW(PreChar "[%s:%4d] " _fmt, \
+		__func__, __LINE__, ##_args)
+
+#ifdef ALOE_SYS_AMEBA_LP
+#  define dw_log_m(...) dw_log_rd(__VA_ARGS__)
+#else // ALOE_SYS_AMEBA_LP
+#  define dw_log_m(_lvl, _fmt, _args...) DX_PRINT_RAW(PreChar "[%s:%4d]%s " _fmt, \
+		__func__, __LINE__, _lvl, ##_args)
+#endif // ALOE_SYS_AMEBA_LP
+ */
+
 void* aloe_mem_malloc(aloe_mem_id_t id, size_t sz, const char *name) {
 	aloe_mem_t *mm = NULL;
 

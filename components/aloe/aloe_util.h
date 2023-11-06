@@ -44,9 +44,18 @@ extern "C" {
 #define aloe_container_of(_obj, _type, _member) \
 	((_type *)((_obj) ? ((char*)(_obj) - offsetof(_type, _member)) : NULL))
 #define aloe_member_of(_type, _member) ((_type *)NULL)->_member
+#define aloe_sizewith(_type, _member) (offsetof(_type, _member) + sizeof(aloe_member_of(_type, _member)))
 
 #define aloe_concat(_s1, _s2) _s1 ## _s2
 #define aloe_concat2(_s1, _s2) aloe_concat(_s1, _s2)
+
+#define aloe_bitmask(_bit, _bits) (((1 << (_bits)) - 1) << (_bit))
+#define aloe_bitval(_v, _bit, _bits) ((_v) & aloe_bitmask(_bit, _bits))
+#define aloe_bitclr(_v, _bit, _bits) ((_v) & ~aloe_bitmask(_bit, _bits))
+#define aloe_bitset(_v, _v2, _bit, _bits) (aloe_bitclr(_v, _bit, _bits) | \
+		aloe_bitval((_v2) << (_bit), _bit, _bits))
+#define aloe_bitval2(_v, _bit, _bits) (((_v) >> (_bit)) & ((1 << (_bits)) - 1))
+#define aloe_roundup(_v, _p) (((_v) & ((_p) - 1)) ? (((_v) + (_p)) & ~((_p) - 1)) : (_v))
 
 /** Generate data array.
  *
@@ -120,7 +129,12 @@ typedef struct aloe_buf_rec {
 #define _aloe_buf_clear(_buf) do {(_buf)->lmt = (_buf)->cap; (_buf)->pos = 0;} while (0)
 #define _aloe_buf_flip(_buf) do {(_buf)->lmt = (_buf)->pos; (_buf)->pos = 0;} while (0)
 
+aloe_buf_t* aloe_buf_clear(aloe_buf_t *buf);
+aloe_buf_t* aloe_buf_flip(aloe_buf_t *buf);
 aloe_buf_t* aloe_buf_rewind(aloe_buf_t *buf);
+
+size_t aloe_rinbuf_read(aloe_buf_t *buf, void *data, size_t sz);
+size_t aloe_rinbuf_write(aloe_buf_t *buf, const void *data, size_t sz);
 size_t aloe_buf_add_pos(aloe_buf_t *buf, const void*, size_t);
 size_t aloe_buf_add_lmt(aloe_buf_t *buf, const void*, size_t);
 
@@ -128,16 +142,19 @@ size_t aloe_buf_add_lmt(aloe_buf_t *buf, const void*, size_t);
 	char data[_sz]; \
 	volatile unsigned rd, wr; \
 }
-#define aloe_rinbuf1_k(_rinbuf) aloe_arraysize((_rinbuf)->data)
-#define aloe_rinbuf1_data_len(_rinbuf) (((_rinbuf)->wr - (_rinbuf)->rd) % aloe_rinbuf1_k(_rinbuf))
+
 #define aloe_rinbuf1_empty(_rinbuf) ((_rinbuf)->wr == (_rinbuf)->rd)
-#define aloe_rinbuf1_full(_rinbuf) (aloe_rinbuf1_data_len(_rinbuf) == aloe_arraysize((_rinbuf)->data))
-#define aloe_rinbuf1_putc(_rinbuf, _b) do { \
-	(_rinbuf)->data[(_rinbuf)->wr % aloe_rinbuf1_k(_rinbuf)] = (_b); \
+
+// rinbuf data size must be power of 2
+#define aloe_rinbuf1_m(_rinbuf) (aloe_arraysize((_rinbuf)->data) - 1)
+#define aloe_rinbuf1_data_len2(_rinbuf) ((_rinbuf)->wr - (_rinbuf)->rd)
+#define aloe_rinbuf1_full2(_rinbuf) (aloe_rinbuf1_data_len2(_rinbuf) == aloe_arraysize((_rinbuf)->data))
+#define aloe_rinbuf1_putc2(_rinbuf, _b) do { \
+	(_rinbuf)->data[(_rinbuf)->wr & aloe_rinbuf1_m(_rinbuf)] = (_b); \
 	(_rinbuf)->wr++; \
 } while(0);
-#define aloe_rinbuf1_getc(_rinbuf, _b) do { \
-	(_b) = (_rinbuf)->data[(_rinbuf)->rd % aloe_rinbuf1_k(_rinbuf)]; \
+#define aloe_rinbuf1_getc2(_rinbuf, _b) do { \
+	(_b) = (_rinbuf)->data[(_rinbuf)->rd & aloe_rinbuf1_m(_rinbuf)]; \
 	(_rinbuf)->rd++; \
 } while(0);
 
@@ -249,6 +266,18 @@ size_t aloe_hd2(void *_buf, size_t buf_sz, const void *data, size_t data_cnt,
 #define aloe_hd(_arr, _v, _s) aloe_hd2(_arr, sizeof(_arr), _v, _s, 1, NULL)
 
 unsigned aloe_cksum(const void *buf, size_t sz, unsigned cksum);
+
+typedef struct {
+	volatile unsigned wr_cnt, rd_cnt, fb_cnt, wr_idx;
+	aloe_buf_t *fb;
+} aloe_rinfb_t;
+
+int aloe_rinfb_init(aloe_rinfb_t *rinfb, void *buf, int rinfb_unit, int rinfb_cnt);
+
+#define aloe_rinfb_full(_rinfb) ((_rinfb)->wr_cnt - (_rinfb)->rd_cnt == (_rinfb)->fb_cnt)
+#define aloe_rinfb_empty(_rinfb) ((_rinfb)->wr_cnt - (_rinfb)->rd_cnt == 0)
+#define aloe_rinfb_wr_idx(_rinfb) ((_rinfb)->wr_cnt % (_rinfb)->fb_cnt)
+#define aloe_rinfb_rd_idx(_rinfb) ((_rinfb)->rd_cnt % (_rinfb)->fb_cnt)
 
 #ifdef __cplusplus
 } /* extern "C" */

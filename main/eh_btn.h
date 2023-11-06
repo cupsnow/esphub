@@ -10,6 +10,7 @@
 #define _H_EM_BTN
 
 #include <driver/gpio.h>
+#include <iot_button.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,6 +20,7 @@ extern "C" {
 #define eh_btn1_pinsel (1ull << eh_btn1_gio)
 
 void eh_btn1_init(void (*isr)(void*), void *args);
+button_handle_t eh_btn2_init(button_cb_t cb, void *usr_data);
 
 #ifdef __cplusplus
 } /* extern "C" */
